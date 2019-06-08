@@ -8,7 +8,7 @@ Header for our iOS view controller
 @import UIKit;
 @import MetalKit;
 
-#import "AAPLRenderer.h"
+#import "../Renderer/AAPLRenderer.h"
 
 // Our view controller.
 @interface AAPLViewController : UIViewController

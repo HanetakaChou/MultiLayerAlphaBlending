@@ -6,7 +6,7 @@ Implementation of our iOS view controller
 */
 
 #import "AAPLViewController.h"
-#import "AAPLRenderer.h"
+#import "../Renderer/AAPLRenderer.h"
 
 @implementation AAPLViewController
 {

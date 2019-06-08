@@ -376,7 +376,7 @@ vector_float3 quaternion_axis(quaternion_float q) {
     }
 }
 
-float AAPL_SIMD_OVERLOAD quaternion_angle(quaternion_float q) {
+float quaternion_angle(quaternion_float q) {
     return 2 * acosf(q.w);
 }
 
