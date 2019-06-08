@@ -10,171 +10,153 @@ using namespace metal;
 
 #import "AAPLShaderCommon.h"
 
-constant uint useDeviceMemory [[function_constant(0)]];
-
-typedef rgba8unorm<half4> rgba8storage;
-typedef r8unorm<half> r8storage;
-
-template <int NUM_LAYERS>
-struct OITData
+typedef struct
 {
-    static constexpr constant short s_numLayers = NUM_LAYERS;
-    
-    rgba8storage colors         [[raster_order_group(0)]] [NUM_LAYERS];
-    half         depths         [[raster_order_group(0)]] [NUM_LAYERS];
-    r8storage    transmittances [[raster_order_group(0)]] [NUM_LAYERS];
-};
+    float4 position [[position]];
+} TriangleInOut;
 
-// The imageblock structure
-template <int NUM_LAYERS>
-struct OITImageblock
+vertex TriangleInOut fullscreentriangle_vertex(uint vid[[vertex_id]])
 {
-    OITData<NUM_LAYERS> oitData;
-};
+    TriangleInOut out;
 
-template <int NUM_LAYERS>
-struct FragOut
-{
-    OITImageblock<NUM_LAYERS> aoitImageBlock [[imageblock_data]];
-};
-
-// OITFragmentFunction, InsertFragment, Resolve, and Clear are templatized on OITDataT   in order
-//   to control the number of layers
-
-template <typename OITDataT>
-inline void InsertFragment(OITDataT oitData, half4 color, half depth, half transmittance)
-{
-    const short numLayers = oitData->s_numLayers;
-
-    for (short i = 0; i < numLayers - 1; ++i)
+    switch(vid)
     {
-        half layerDepth = oitData->depths[i];
-        half4 layerColor = oitData->colors[i];
-        half layerTransmittance = oitData->transmittances[i];
-
-        bool insert = (depth <= layerDepth);
-        oitData->colors[i] = insert ? color : layerColor;
-        oitData->depths[i] = insert ? depth : layerDepth;
-        oitData->transmittances[i] = insert ? transmittance : layerTransmittance;
-
-        color = insert ? layerColor : color;
-        depth = insert ? layerDepth : depth;
-        transmittance = insert ? layerTransmittance : transmittance;
+        case 0:
+            out.position = float4(-1, -3, 0, 1);
+            break;
+        case 1:
+            out.position = float4(-1, 1, 0, 1);
+            break;
+        case 2:
+            out.position = float4(3, 1, 0, 1);
+            break;
     }
-
-    const short lastLayer = numLayers - 1;
-    half lastDepth = oitData->depths[lastLayer];
-    half4 lastColor = oitData->colors[lastLayer];
-    half lastTransmittance = oitData->transmittances[lastLayer];
-
-    bool newDepthFirst = (depth <= lastDepth);
-
-    half firstDepth = newDepthFirst ? depth : lastDepth;
-    half4 firstColor = newDepthFirst ? color : lastColor;
-    half4 secondColor = newDepthFirst ? lastColor : color;
-    half firstTransmittance = newDepthFirst ? transmittance : lastTransmittance;
-
-    oitData->colors[lastLayer] = firstColor + secondColor * firstTransmittance;
-    oitData->depths[lastLayer] = firstDepth;
-    oitData->transmittances[lastLayer] = transmittance * lastTransmittance;
+    
+    return out;
 }
 
-template <typename OITDataT>
-void OITFragmentFunction(ColorInOut                   in,
-                         constant AAPLFrameUniforms & uniforms,
-                         texture2d<half>              baseColorMap,
-                         OITDataT                     oitData)
+typedef struct
 {
-    const float depth = in.position.z / in.position.w;
+    half4 AC0V0[[color(MLABColorAttachmentAC0V0)]];
+    half4 AC1V1[[color(MLABColorAttachmentAC1V1)]];
+    half4 AC2V2[[color(MLABColorAttachmentAC2V2)]];
+    half4 AC3V3[[color(MLABColorAttachmentAC3V3)]];
+    half4 D0123[[color(MLABColorAttachmentD0123)]];
+} KBuffer_4Layer;
+
+struct OITData_4Layer
+{
+    half4 ACV[4];
+    half D[4];
+};
+
+fragment KBuffer_4Layer OIT_4Layer_FragmentFunction(ColorInOut in[[stage_in]],
+                                           texture2d<half> baseColorMap[[texture(AAPLTextureIndexBaseColor)]],
+                                           KBuffer_4Layer kbuffer)
+{
+    const float depth = in.position.z; /// in.position.w;
     
     constexpr sampler linearSampler(mip_filter::linear,
                                     mag_filter::linear,
                                     min_filter::linear);
     
-    half4 fragmentColor = baseColorMap.sample(linearSampler, in.texCoord);
+    half4 baseColorSample = baseColorMap.sample(linearSampler, in.texCoord);
+    // Reduce alpha a little so transparency is easier to see
+    baseColorSample.a *= 0.6f;
+    
+    half4 newACV = half4(baseColorSample.a*baseColorSample.rgb, 1 - baseColorSample.a);
+    half newD = depth;
+    
+    //Read KBuffer
+    OITData_4Layer oitData;
+    oitData.ACV[0] = kbuffer.AC0V0;
+    oitData.ACV[1] = kbuffer.AC1V1;
+    oitData.ACV[2] = kbuffer.AC2V2;
+    oitData.ACV[3] = kbuffer.AC3V3;
+    oitData.D[0] = kbuffer.D0123.r;
+    oitData.D[1] = kbuffer.D0123.g;
+    oitData.D[2] = kbuffer.D0123.b;
+    oitData.D[3] = kbuffer.D0123.a;
+    
+    //Modify KBuffer
+    const short numLayers = 4;
+    const short lastLayer = numLayers - 1;
 
-    fragmentColor.a = 0.5;
+    //Insert
+    for (short i = 0; i < numLayers; ++i)
+    {
+        half4 layerACV = oitData.ACV[i];
+        half layerD = oitData.D[i];
 
-    fragmentColor.rgb *= (1 - fragmentColor.a);
-    InsertFragment(oitData, fragmentColor, depth, 1 - fragmentColor.a);
+        bool insert = (newD <= layerD);
+        //Insert
+        oitData.ACV[i] = insert ? newACV : layerACV;
+        oitData.D[i] = insert ? newD : layerD;
+        //Pop Current Layer And Insert It Later
+        newACV = insert ? layerACV : newACV;
+        newD = insert ? layerD : newD;
+    }
+    
+    //Merge
+    half4 lastACV = oitData.ACV[lastLayer];
+    half lastD = oitData.D[lastLayer];
+    
+    bool newDepthFirst = (newD <= lastD); //此时newD指向原KBuffer中的最后一个Layer（目前已被Pop）
+    
+    half4 firstACV = newDepthFirst ? newACV : lastACV;
+    half firstD = newDepthFirst ? newD : lastD;
+    half4 secondACV = newDepthFirst ? lastACV : newACV;
+    
+    oitData.ACV[lastLayer] = half4(firstACV.rgb + secondACV.rgb * firstACV.a, firstACV.a*secondACV.a);
+    oitData.D[lastLayer] = firstD;
+    
+    //Write KBuffer
+    KBuffer_4Layer output;
+    output.AC0V0 = oitData.ACV[0];
+    output.AC1V1 = oitData.ACV[1];
+    output.AC2V2 = oitData.ACV[2];
+    output.AC3V3 = oitData.ACV[3];
+    output.D0123 = half4(oitData.D[0], oitData.D[1], oitData.D[2], oitData.D[3]);
+    return output;
 }
 
-template <int NUM_LAYERS>
-void OITClear(imageblock<OITImageblock<NUM_LAYERS>, imageblock_layout_explicit> oitData,
-              ushort2 tid)
+struct AccumLightBuffer
 {
-    threadgroup_imageblock OITData<NUM_LAYERS> &pixelData = oitData.data(tid)->oitData;
-    const short numLayers = pixelData.s_numLayers;
+    half4 lighting[[color(MLABColorAttachmentLighting)]];
+};
 
+typedef struct
+{
+    half4 AC0V0[[color(MLABColorAttachmentAC0V0)]];
+    half4 AC1V1[[color(MLABColorAttachmentAC1V1)]];
+    half4 AC2V2[[color(MLABColorAttachmentAC2V2)]];
+    half4 AC3V3[[color(MLABColorAttachmentAC3V3)]];
+} KBuffer_4Layer_NoDepth;
+
+struct OITData_4Layer_NoDepth
+{
+    half4 ACV[4];
+};
+
+fragment AccumLightBuffer OITResolve_4Layer_fragment(KBuffer_4Layer_NoDepth kbuffer)
+{
+    OITData_4Layer_NoDepth oitData;
+    oitData.ACV[0] = kbuffer.AC0V0;
+    oitData.ACV[1] = kbuffer.AC1V1;
+    oitData.ACV[2] = kbuffer.AC2V2;
+    oitData.ACV[3] = kbuffer.AC3V3;
+    
+    //Under Operation
+    const short numLayers = 4;
+    half3 CFinal = half3(0.0f,0.0f,0.0f);
+    half AlphaTotal = 1.0f;
     for (ushort i = 0; i < numLayers; ++i)
     {
-        pixelData.colors[i] = half4(0.0);
-        pixelData.depths[i] = 65504.0;
-        pixelData.transmittances[i] = 1.0;
+        CFinal += oitData.ACV[i].rgb * AlphaTotal;
+        AlphaTotal *= oitData.ACV[i].a;
     }
+    
+    AccumLightBuffer output;
+    output.lighting = half4(CFinal, AlphaTotal);
+    return output;
 }
-
-template <int NUM_LAYERS>
-half4 OITResolve(OITData<NUM_LAYERS> pixelData)
-{
-    const short numLayers = pixelData.s_numLayers;
-
-    // Composite!
-    half4 finalColor = 0;
-    half transmittance = 1;
-    for (ushort i = 0; i < numLayers; ++i)
-    {
-        finalColor += (half4)pixelData.colors[i] * transmittance;
-        transmittance *= (half)pixelData.transmittances[i];
-    }
-
-    finalColor.w = 1;
-    return finalColor;
-}
-
-fragment FragOut<2>
-OITFragmentFunction_2Layer(ColorInOut                   in            [[ stage_in ]],
-                           constant AAPLFrameUniforms & uniforms      [[ buffer (AAPLBufferIndexFrameUniforms) ]],
-                           texture2d<half>              baseColorMap  [[ texture(AAPLTextureIndexBaseColor) ]],
-                           OITImageblock<2>             oitImageblock [[ imageblock_data ]])
-{
-    OITFragmentFunction(in, uniforms, baseColorMap, &oitImageblock.oitData);
-    FragOut<2> Out;
-    Out.aoitImageBlock = oitImageblock;
-    return Out;
-}
-
-fragment FragOut<4>
-OITFragmentFunction_4Layer(ColorInOut                   in            [[ stage_in ]],
-                           constant AAPLFrameUniforms & uniforms      [[ buffer (AAPLBufferIndexFrameUniforms) ]],
-                           texture2d<half>              baseColorMap  [[ texture(AAPLTextureIndexBaseColor) ]],
-                           OITImageblock<4>             oitImageblock [[ imageblock_data ]])
-{
-    OITFragmentFunction(in, uniforms, baseColorMap, &oitImageblock.oitData);
-    FragOut<4> Out;
-    Out.aoitImageBlock = oitImageblock;
-    return Out;
-}
-
-kernel void OITClear_2Layer(imageblock<OITImageblock<2>, imageblock_layout_explicit> oitData,
-                            ushort2 tid [[thread_position_in_threadgroup]])
-{
-    OITClear(oitData, tid);
-}
-
-kernel void OITClear_4Layer(imageblock<OITImageblock<4>, imageblock_layout_explicit> oitData,
-                            ushort2 tid [[thread_position_in_threadgroup]])
-{
-    OITClear(oitData, tid);
-}
-
-fragment half4 OITResolve_2Layer(OITImageblock<2> oitImageblock [[imageblock_data]])
-{
-    return OITResolve(oitImageblock.oitData);
-}
-
-fragment half4 OITResolve_4Layer(OITImageblock<4> oitImageblock [[imageblock_data]])
-{
-    return OITResolve(oitImageblock.oitData);
-}
-

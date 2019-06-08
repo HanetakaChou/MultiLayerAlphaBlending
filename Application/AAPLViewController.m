@@ -42,22 +42,7 @@ Implementation of our iOS view controller
 
     _view.delegate = _renderer;
 
-    // Set up the tap gesture recognizer
-    _tapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
-    [self.view addGestureRecognizer:_tapRecognizer];
-
-    [self updateTransparencyMethodText];
-}
-
-- (void)updateTransparencyMethodText
-{    
-    self.mainLabel.text = [NSString stringWithFormat:@"%s", s_transparencyMethodNames[_renderer.transparencyMethod]];
-}
-
-- (void)handleTap:(UITapGestureRecognizer *)tap
-{
-    _renderer.transparencyMethod = ((_renderer.transparencyMethod + 1) % AAPLNumTransparencyMethods);
-    [self updateTransparencyMethodText];
+    self.mainLabel.text = @"Multi Layer Alpha Blending (4 Layer)";
 }
 
 @end

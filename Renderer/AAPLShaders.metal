@@ -39,20 +39,3 @@ vertex ColorInOut vertexTransform(Vertex in [[stage_in]],
 
     return out;
 }
-
-// Fragment function
-fragment float4 unorderedFragmentShader(ColorInOut in                         [[stage_in]],
-                                        constant AAPLFrameUniforms & uniforms [[ buffer(AAPLBufferIndexFrameUniforms) ]],
-                                        texture2d<half> baseColorMap        [[ texture(AAPLTextureIndexBaseColor) ]])
-{
-    constexpr sampler linearSampler(mip_filter::linear,
-                                    mag_filter::linear,
-                                    min_filter::linear);
-
-    half4 baseColorSample = baseColorMap.sample(linearSampler, in.texCoord);
-
-    // Reduce alpha a little so transparency is easier to see
-    baseColorSample.a *= 0.6f;
-
-    return float4(baseColorSample);
-}

@@ -32,16 +32,15 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
     // Buffer for uniforms which change per-frame
     id <MTLBuffer> _frameUniformBuffers[AAPLMaxBuffersInFlight];
     
+    MTLRenderPassDescriptor *_MLABRenderPassDescriptor;
+    id <MTLRenderPipelineState> _kbuffer_RMW_PipelineState;
+    id <MTLRenderPipelineState> _resolvePipelineState;
+    
+    id <MTLDepthStencilState> _compositePassDepthState;
+    
     // We have a fragment shader per rendering method
-    id <MTLRenderPipelineState> _pipelineStates[AAPLNumTransparencyMethods];
     id <MTLDepthStencilState> _depthState;
     
-    // Tile shader used to prepare the imageblock memory
-    id <MTLRenderPipelineState> _clearTileStates[AAPLNumTransparencyMethods];
-    
-    // Tile shader used to resolve the imageblock OIT data into the final framebuffer
-    id <MTLRenderPipelineState> _resolveStates[AAPLNumTransparencyMethods];
-
     // Metal vertex descriptor specifying how vertices will by laid out  render
     //   for input into our pipeline and how we'll layout our ModelIO vertices
     MTLVertexDescriptor *_mtlVertexDescriptor;
@@ -58,10 +57,6 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
 
     // Array of App-Specific mesh objects in our scene
     NSArray<AAPLMesh *> *_meshes;
-
-    // Buffer that holds OIT data if device memory is being used
-    id <MTLBuffer> _oitBufferData;
-
 }
 
 -(nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)view
@@ -71,16 +66,16 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
     {
         _device = view.device;
 
-        if(![_device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1])
-        {
+        //if(![_device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1])
+        //{
             // This sample requires features avaliable with the iOS_GPUFamily4_v1 feature set
             //   (which is avaliable on devices with A11 GPUs or later).  If the iOS_GPUFamily4_v1
             //   feature set is is unavliable, the app would need to implement a backup path that
             //   does not use many of the APIs demonstated in this sample.  However, the
             //   implementation of such a backup path is beyond the scope of this sample.
-            assert(!"Sample requires GPUFamily4_v1 (introduced with A11)");
-            return nil;
-        }
+        //    assert(!"Sample requires GPUFamily4_v1 (introduced with A11)");
+        //    return nil;
+        //}
 
         _inFlightSemaphore = dispatch_semaphore_create(AAPLMaxBuffersInFlight);
 
@@ -94,8 +89,18 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
 /// Create and load our basic Metal state objects
 - (void)loadMetalWithMetalKitView:(nonnull MTKView *)view
 {
+    view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+    view.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
+    view.sampleCount = 1;
+    
     NSError *error;
 
+    _AC0V0_KBuffer4LayerFormat = MTLPixelFormatRGBA16Float;
+    _AC1V1_KBuffer4LayerFormat = MTLPixelFormatRGBA8Unorm; //PixelLocalStorage 大小不够，最后若干层的贡献最低，适当降低精度 //A7-A10 256位 //A11 512位
+    _AC2V2_KBuffer4LayerFormat = MTLPixelFormatRGBA8Unorm;
+    _AC3V3_KBuffer4LayerFormat = MTLPixelFormatRGBA8Unorm;
+    _D0123_KBuffer4LayerFormat = MTLPixelFormatRGBA16Float;
+    
     // Load all the shader files with a metal file extension in the project
     id <MTLLibrary> defaultLibrary = [_device newDefaultLibrary];
 
@@ -110,32 +115,42 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
 
         _frameUniformBuffers[i].label = [NSString stringWithFormat:@"FrameUniformBuffer%lu", i];
     }
-    
-    // Function constants for the functions
-    MTLFunctionConstantValues *constantValues = [MTLFunctionConstantValues new];
+        
+    //
+    _MLABRenderPassDescriptor = [MTLRenderPassDescriptor new];
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentLighting].loadAction =  MTLLoadActionClear;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentLighting].storeAction = MTLStoreActionStore;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentLighting].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC0V0].loadAction = MTLLoadActionClear;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC0V0].storeAction = MTLStoreActionDontCare;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC0V0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC1V1].loadAction = MTLLoadActionClear;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC1V1].storeAction = MTLStoreActionDontCare;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC1V1].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC2V2].loadAction = MTLLoadActionClear;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC2V2].storeAction = MTLStoreActionDontCare;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC2V2].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC3V3].loadAction = MTLLoadActionClear;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC3V3].storeAction = MTLStoreActionDontCare;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC3V3].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentD0123].loadAction = MTLLoadActionClear;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentD0123].storeAction = MTLStoreActionDontCare;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentD0123].clearColor = MTLClearColorMake(1.0, 1.0, 1.0, 1.0);
+    _MLABRenderPassDescriptor.depthAttachment.loadAction = MTLLoadActionClear;
+    _MLABRenderPassDescriptor.depthAttachment.storeAction = MTLStoreActionDontCare;
+    _MLABRenderPassDescriptor.stencilAttachment.loadAction = MTLLoadActionClear;
+    _MLABRenderPassDescriptor.stencilAttachment.storeAction = MTLStoreActionDontCare;
+    _MLABRenderPassDescriptor.depthAttachment.clearDepth = 1.0;
+    _MLABRenderPassDescriptor.stencilAttachment.clearStencil = 0;
     
     // Load the various fragment functions into the library
-    id <MTLFunction> transparencyMethodFragmentFunctions[AAPLNumTransparencyMethods] = {
-        [defaultLibrary newFunctionWithName:@"OITFragmentFunction_4Layer" constantValues:constantValues error:nil],
-        [defaultLibrary newFunctionWithName:@"OITFragmentFunction_2Layer" constantValues:constantValues error:nil],
-        [defaultLibrary newFunctionWithName:@"unorderedFragmentShader" constantValues:constantValues error:nil],
-    };
-
+    id <MTLFunction> fullscreentriangleVertexFunction = [defaultLibrary newFunctionWithName:@"fullscreentriangle_vertex"];
+    id <MTLFunction> OIT_4Layer_FragmentFunction = [defaultLibrary newFunctionWithName:@"OIT_4Layer_FragmentFunction"];
+    id <MTLFunction> OITResolve_4Layer_FragmentFunction = [defaultLibrary newFunctionWithName:@"OITResolve_4Layer_fragment"];
+    
     // Load the vertex function into the library
     id <MTLFunction> vertexFunction = [defaultLibrary newFunctionWithName:@"vertexTransform"];
     
-    id <MTLFunction> resolveFunctions[AAPLNumTransparencyMethods] = {
-        [defaultLibrary newFunctionWithName:@"OITResolve_4Layer" constantValues:constantValues error:nil],
-        [defaultLibrary newFunctionWithName:@"OITResolve_2Layer" constantValues:constantValues error:nil],
-         nil
-    };
-    
-    id <MTLFunction> clearFunctions[AAPLNumTransparencyMethods] = {
-        [defaultLibrary newFunctionWithName:@"OITClear_4Layer" constantValues:constantValues error:nil],
-        [defaultLibrary newFunctionWithName:@"OITClear_2Layer" constantValues:constantValues error:nil],
-        nil
-    };
-
     // Create a vertex descriptor for our Metal pipeline. Specifies the layout of vertices the
     //   pipeline should expect.  The layout below keeps attributes used to calculate vertex shader
     //   output position separate (world position, skinning, tweening weights) separate from other
@@ -163,98 +178,73 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
     _mtlVertexDescriptor.layouts[AAPLBufferIndexMeshGenerics].stepRate = 1;
     _mtlVertexDescriptor.layouts[AAPLBufferIndexMeshGenerics].stepFunction = MTLVertexStepFunctionPerVertex;
 
-    view.depthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-    view.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
-    view.sampleCount = 1;
-    
-    // Create a reusable pipeline state
-    MTLRenderPipelineDescriptor *pipelineStateDescriptor =
-        [[MTLRenderPipelineDescriptor alloc] init];
-    pipelineStateDescriptor.vertexDescriptor = _mtlVertexDescriptor;
-    pipelineStateDescriptor.vertexFunction = vertexFunction;
-    pipelineStateDescriptor.sampleCount = view.sampleCount;
-    pipelineStateDescriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
-    pipelineStateDescriptor.stencilAttachmentPixelFormat = view.depthStencilPixelFormat;
-    pipelineStateDescriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat;
-
-    // Create the various pipeline states
-    for (int i = 0; i < AAPLNumTransparencyMethods; ++i)
     {
-        pipelineStateDescriptor.label = [[NSString alloc] initWithUTF8String:s_transparencyMethodNames[i]];
-
-        if(AAPLMethodUnorderedBlending == i)
-        {
-            // Alpha blending should only be enable for our unordered alpha blending method
-            pipelineStateDescriptor.colorAttachments[0].blendingEnabled = YES;
-            pipelineStateDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-            pipelineStateDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-            pipelineStateDescriptor.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-        }
-        else
-        {
-            // We will not actually write colors with our render pass when using or OIT methods
-            //    Instead, our tile shaders will accomplish these writes
-            pipelineStateDescriptor.colorAttachments[0].blendingEnabled = NO;
-            pipelineStateDescriptor.colorAttachments[0].writeMask = MTLColorWriteMaskNone;
-        }
-
-        pipelineStateDescriptor.fragmentFunction = transparencyMethodFragmentFunctions[i];
-
-        _pipelineStates[i] = [_device newRenderPipelineStateWithDescriptor:pipelineStateDescriptor error:&error];
-        if (!_pipelineStates[i])
+        MTLRenderPipelineDescriptor *pipelineStateDescriptor = [MTLRenderPipelineDescriptor new];
+        
+        pipelineStateDescriptor.label = @"KBuffer ReadModifyWrite";
+        pipelineStateDescriptor.vertexDescriptor = _mtlVertexDescriptor;
+        pipelineStateDescriptor.vertexFunction = vertexFunction;
+        pipelineStateDescriptor.fragmentFunction = OIT_4Layer_FragmentFunction;
+        pipelineStateDescriptor.sampleCount = view.sampleCount;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentLighting].pixelFormat = view.colorPixelFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentLighting].blendingEnabled = NO;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentLighting].writeMask = MTLColorWriteMaskNone;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC0V0].pixelFormat=_AC0V0_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC1V1].pixelFormat=_AC1V1_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC2V2].pixelFormat=_AC2V2_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC3V3].pixelFormat=_AC3V3_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentD0123].pixelFormat=_D0123_KBuffer4LayerFormat;
+        pipelineStateDescriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+        pipelineStateDescriptor.stencilAttachmentPixelFormat = view.depthStencilPixelFormat;
+        
+        _kbuffer_RMW_PipelineState = [_device newRenderPipelineStateWithDescriptor:pipelineStateDescriptor error:&error];
+        if (!_kbuffer_RMW_PipelineState)
         {
             NSLog(@"Failed to create pipeline state, error %@", error);
         }
     }
-
-    // Create the various tile states for setting up and resolving imageblock memory
-    // because of the usage of tile render pipeline descriptors
-    for (NSUInteger i = 0; i < AAPLNumTransparencyMethods; ++i)
+    
     {
-
-        if(AAPLMethodUnorderedBlending == i)
+        MTLRenderPipelineDescriptor *pipelineStateDescriptor = [MTLRenderPipelineDescriptor new];
+        
+        pipelineStateDescriptor.label = @"OITResolve";
+        pipelineStateDescriptor.vertexDescriptor = nil;
+        pipelineStateDescriptor.vertexFunction = fullscreentriangleVertexFunction;
+        pipelineStateDescriptor.fragmentFunction = OITResolve_4Layer_FragmentFunction;
+        pipelineStateDescriptor.sampleCount = view.sampleCount;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentLighting].pixelFormat = view.colorPixelFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC0V0].pixelFormat=_AC0V0_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC1V1].pixelFormat=_AC1V1_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC2V2].pixelFormat=_AC2V2_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentAC3V3].pixelFormat=_AC3V3_KBuffer4LayerFormat;
+        pipelineStateDescriptor.colorAttachments[MLABColorAttachmentD0123].pixelFormat=_D0123_KBuffer4LayerFormat;
+        pipelineStateDescriptor.depthAttachmentPixelFormat = view.depthStencilPixelFormat;
+        pipelineStateDescriptor.stencilAttachmentPixelFormat = view.depthStencilPixelFormat;
+        
+        _resolvePipelineState = [_device newRenderPipelineStateWithDescriptor:pipelineStateDescriptor error:&error];
+        if (!_resolvePipelineState)
         {
-            // Tile shading only used for ordering
-            continue;
-        }
-
-        MTLTileRenderPipelineDescriptor *tileDesc = [MTLTileRenderPipelineDescriptor new];
-        tileDesc.label = [[NSString alloc] initWithFormat:@"%lu Layer OIT Resolve", i];
-        tileDesc.tileFunction = resolveFunctions[i];
-        tileDesc.colorAttachments[0].pixelFormat = view.colorPixelFormat;
-        tileDesc.threadgroupSizeMatchesTileSize = YES;
-
-        _resolveStates[i] = [_device newRenderPipelineStateWithTileDescriptor:tileDesc
-                                                                      options:0
-                                                                   reflection:nil
-                                                                        error:&error];
-        if (!_resolveStates[i])
-        {
-            NSLog(@"Failed to create tile pipeline state, error %@", error);
-        }
-
-        tileDesc.label = [[NSString alloc] initWithFormat:@"%lu Layer OIT Clear", i];
-        tileDesc.tileFunction = clearFunctions[i];
-        _clearTileStates[i] = [_device newRenderPipelineStateWithTileDescriptor:tileDesc
-                                                                        options:0
-                                                                     reflection:nil
-                                                                          error:&error];
-        if (!_clearTileStates[i])
-        {
-            NSLog(@"Failed to create tile pipeline state, error %@", error);
+            NSLog(@"Failed to create pipeline state, error %@", error);
         }
     }
-
-    MTLDepthStencilDescriptor *depthStateDesc = [[MTLDepthStencilDescriptor alloc] init];
-    depthStateDesc.depthCompareFunction = MTLCompareFunctionLess;
-    depthStateDesc.depthWriteEnabled = NO;
-    _depthState = [_device newDepthStencilStateWithDescriptor:depthStateDesc];
-
+    
+    {
+        MTLDepthStencilDescriptor *depthStateDesc = [[MTLDepthStencilDescriptor alloc] init];
+        depthStateDesc.depthCompareFunction = MTLCompareFunctionLess;
+        depthStateDesc.depthWriteEnabled = NO;
+        _depthState = [_device newDepthStencilStateWithDescriptor:depthStateDesc];
+    }
+    
+    {
+        MTLDepthStencilDescriptor *depthStateDesc = [MTLDepthStencilDescriptor new];
+        depthStateDesc.label = @"CompositePass";
+        depthStateDesc.depthCompareFunction = MTLCompareFunctionAlways;
+        depthStateDesc.depthWriteEnabled = NO;
+        _compositePassDepthState = [_device newDepthStencilStateWithDescriptor:depthStateDesc];
+    }
+    
     // Create the command queue
     _commandQueue = [_device newCommandQueue];
-    
-    // Set alpha blending as our starting rendering method
-    _transparencyMethod = AAPLMethod4LayerOrderIndependent;
 
     _frameNum = 0;
 }
@@ -326,37 +316,49 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
     
 	float aspect = size.width / (float)size.height;
     _projectionMatrix = matrix_perspective_left_hand(65.0f * (M_PI / 180.0f), aspect, 1.0f, 5000.0);
-}
-
-- (bool)isOITRenderingMethod
-{
-    return _transparencyMethod != AAPLMethodUnorderedBlending;
-}
-
-- (MTLSize)optimalTileSize
-{
-    switch (_transparencyMethod)
-    {
-        case AAPLMethod2LayerOrderIndependent: return MTLSizeMake(32, 32, 1);
-        case AAPLMethod4LayerOrderIndependent: return MTLSizeMake(32, 16, 1);
-        default:
-        NSLog(@"Invalid tile size for rendering method: %d", _transparencyMethod);
-        return MTLSizeMake(32, 32, 1);
-    }
+    
+    MTLTextureDescriptor *KBuffer4LayerTextureDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatInvalid width:size.width height:size.height mipmapped:NO];
+    KBuffer4LayerTextureDesc.usage = MTLTextureUsageRenderTarget;
+    KBuffer4LayerTextureDesc.storageMode = MTLStorageModeMemoryless;
+    
+    KBuffer4LayerTextureDesc.pixelFormat = _AC0V0_KBuffer4LayerFormat;
+    _AC0V0_KBuffer4Layer = [_device newTextureWithDescriptor:KBuffer4LayerTextureDesc];
+    
+    KBuffer4LayerTextureDesc.pixelFormat = _AC1V1_KBuffer4LayerFormat;
+    _AC1V1_KBuffer4Layer = [_device newTextureWithDescriptor:KBuffer4LayerTextureDesc];
+    
+    KBuffer4LayerTextureDesc.pixelFormat = _AC2V2_KBuffer4LayerFormat;
+    _AC2V2_KBuffer4Layer = [_device newTextureWithDescriptor:KBuffer4LayerTextureDesc];
+    
+    KBuffer4LayerTextureDesc.pixelFormat = _AC3V3_KBuffer4LayerFormat;
+    _AC3V3_KBuffer4Layer = [_device newTextureWithDescriptor:KBuffer4LayerTextureDesc];
+    
+    KBuffer4LayerTextureDesc.pixelFormat = _D0123_KBuffer4LayerFormat;
+    _D0123_KBuffer4Layer = [_device newTextureWithDescriptor:KBuffer4LayerTextureDesc];
+    
+    _AC0V0_KBuffer4Layer.label = @"AC0V0";
+    _AC1V1_KBuffer4Layer.label = @"AC1V1";
+    _AC2V2_KBuffer4Layer.label = @"AC2V2";
+    _AC3V3_KBuffer4Layer.label = @"AC3V3";
+    _D0123_KBuffer4Layer.label = @"D0123";
+    
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC0V0].texture = _AC0V0_KBuffer4Layer;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC1V1].texture = _AC1V1_KBuffer4Layer;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC2V2].texture = _AC2V2_KBuffer4Layer;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentAC3V3].texture = _AC3V3_KBuffer4Layer;
+    _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentD0123].texture = _D0123_KBuffer4Layer;
 }
 
 // Called whenever the view needs to render
 - (void) drawInMTKView:(nonnull MTKView *)view
 {
-    assert((int)_transparencyMethod < AAPLNumTransparencyMethods);
-    
     // Wait to ensure only AAPLMaxBuffersInFlight are getting proccessed by any stage in the Metal
     //   pipeline (App, Metal, Drivers, GPU, etc)
     dispatch_semaphore_wait(_inFlightSemaphore, DISPATCH_TIME_FOREVER);
 
     // Create a new command buffer for each renderpass to the current drawable
     id <MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
-    commandBuffer.label = @"MyCommand";
+    //commandBuffer.label = @"MyCommand";
 
     // Add completion hander which signal _inFlightSemaphore when Metal and the GPU has fully
     //   finished proccssing the commands we're encoding this frame.  This indicates when the
@@ -370,66 +372,36 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
 
     [self updateGameState];
 
-    // Obtain a renderPassDescriptor generated from the view's drawable textures
-    MTLRenderPassDescriptor *renderPassDescriptor = view.currentRenderPassDescriptor;
-
-    // If we've gotten a renderPassDescriptor we can render to the drawable, otherwise we'll skip
-    //   any rendering this frame because we have no drawable to draw to
-    if(renderPassDescriptor != nil) {
+    id<MTLTexture> drawableTexture = view.currentDrawable.texture;
+    
+    // The pass can only render if a drawable is available, otherwise it needs to skip
+    // rendering this frame.
+    if(drawableTexture)
+    {
+      
+        _MLABRenderPassDescriptor.colorAttachments[MLABColorAttachmentLighting].texture = drawableTexture;
+        _MLABRenderPassDescriptor.depthAttachment.texture = view.depthStencilTexture;
+        _MLABRenderPassDescriptor.stencilAttachment.texture = view.depthStencilTexture;
         
-        MTLSize tileSize = {};
-
-        if (self.isOITRenderingMethod)
-        {
-            tileSize = self.optimalTileSize;
-            
-            renderPassDescriptor.tileWidth = tileSize.width;
-            renderPassDescriptor.tileHeight = tileSize.height;
-            
-            // Get the imageblock sample length from the compiled pipeline state
-            renderPassDescriptor.imageblockSampleLength =
-                _resolveStates[_transparencyMethod].imageblockSampleLength;
-        }
-
         // Create a render command encoder so we can render into something
         id <MTLRenderCommandEncoder> renderEncoder =
-            [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
+        [commandBuffer renderCommandEncoderWithDescriptor:_MLABRenderPassDescriptor];
         renderEncoder.label = @"Rendering";
-
-        if(self.isOITRenderingMethod)
-        {
-            // If we're not using device memory, we need to clear the threadgroup data
-            [renderEncoder pushDebugGroup:@"Clear Imageblock Memory"];
-            [renderEncoder setRenderPipelineState:_clearTileStates[_transparencyMethod]];
-            [renderEncoder dispatchThreadsPerTile:tileSize];
-            [renderEncoder popDebugGroup];
-        }
-
+        
         // Set render command encoder state
         [renderEncoder pushDebugGroup:@"Render Mesh"];
         
-		[renderEncoder setCullMode:MTLCullModeBack];
+        [renderEncoder setCullMode:MTLCullModeBack];
         [renderEncoder setDepthStencilState:_depthState];
-        [renderEncoder setRenderPipelineState:_pipelineStates[_transparencyMethod]];
-
+        [renderEncoder setRenderPipelineState:_kbuffer_RMW_PipelineState];
+        
         // Set our per frame buffers
-        [renderEncoder setVertexBuffer:_frameUniformBuffers[_uniformBufferIndex]
-                                offset:0
-                               atIndex:AAPLBufferIndexFrameUniforms];
-
-        [renderEncoder setFragmentBuffer:_frameUniformBuffers[_uniformBufferIndex]
-                                  offset:0
-                                 atIndex:AAPLBufferIndexFrameUniforms];
-
-        [renderEncoder setFragmentBuffer:_oitBufferData
-                                  offset:0
-                                 atIndex:AAPLBufferIndexOITData];
-
-
+        [renderEncoder setVertexBuffer:_frameUniformBuffers[_uniformBufferIndex] offset:0 atIndex:AAPLBufferIndexFrameUniforms];
+        
         for (__unsafe_unretained AAPLMesh *mesh in _meshes)
         {
             __unsafe_unretained MTKMesh *metalKitMesh = mesh.metalKitMesh;
-
+            
             // Set mesh's vertex buffers
             for (NSUInteger bufferIndex = 0; bufferIndex < metalKitMesh.vertexBuffers.count; bufferIndex++)
             {
@@ -441,16 +413,15 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
                                            atIndex:bufferIndex];
                 }
             }
-
+            
             // Draw each submesh of our mesh
             for(__unsafe_unretained AAPLSubmesh *submesh in mesh.submeshes)
             {
                 // Set any textures read/sampled from our render pipeline
-                [renderEncoder setFragmentTexture:submesh.textures[AAPLTextureIndexBaseColor]
-                                          atIndex:AAPLTextureIndexBaseColor];
-
+                [renderEncoder setFragmentTexture:submesh.textures[AAPLTextureIndexBaseColor] atIndex:AAPLTextureIndexBaseColor];
+                
                 MTKSubmesh *metalKitSubmesh = submesh.metalKitSubmmesh;
-
+                
                 [renderEncoder drawIndexedPrimitives:metalKitSubmesh.primitiveType
                                           indexCount:metalKitSubmesh.indexCount
                                            indexType:metalKitSubmesh.indexType
@@ -458,18 +429,21 @@ static const NSUInteger AAPLMaxBuffersInFlight = 3;
                                    indexBufferOffset:metalKitSubmesh.indexBuffer.offset];
             }
         }
-
-        [renderEncoder popDebugGroup];
-
-        if(self.isOITRenderingMethod)
-        {
-            // Resolve the OIT data from the threadgroup data
-            [renderEncoder pushDebugGroup:@"ResolveTranparency"];
-            [renderEncoder setRenderPipelineState:_resolveStates[_transparencyMethod]];
-            [renderEncoder dispatchThreadsPerTile:tileSize];
-            [renderEncoder popDebugGroup];
-        }
         
+        [renderEncoder popDebugGroup];
+        
+        [renderEncoder pushDebugGroup:@"Composite Pass"];
+        
+        [renderEncoder setCullMode:MTLCullModeNone];
+        [renderEncoder setRenderPipelineState:_resolvePipelineState];
+        [renderEncoder setDepthStencilState:_compositePassDepthState];
+        //[renderEncoder setVertexBuffer
+        
+        // Draw full screen triangle
+        [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+        
+        [renderEncoder popDebugGroup];
+    
         // We're done encoding commands
         [renderEncoder endEncoding];
     }

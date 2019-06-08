@@ -37,7 +37,7 @@
 		ED4E76ED1E397666008D4A9D /* AAPLMathUtilities.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AAPLMathUtilities.h; sourceTree = "<group>"; };
 		ED4E76EE1E397666008D4A9D /* AAPLMathUtilities.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AAPLMathUtilities.m; sourceTree = "<group>"; };
 		ED4E76F01E397667008D4A9D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		ED4E76F51E397667008D4A9D /* OrderIndependentTransparencyWithImageblocks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OrderIndependentTransparencyWithImageblocks.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED4E76F51E397667008D4A9D /* MultiLayerAlphaBlending.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MultiLayerAlphaBlending.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED4E76F91E397667008D4A9D /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		ED4E76FB1E397667008D4A9D /* AAPLAppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AAPLAppDelegate.h; sourceTree = "<group>"; };
 		ED4E76FC1E397667008D4A9D /* AAPLAppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AAPLAppDelegate.m; sourceTree = "<group>"; };
@@ -103,7 +103,7 @@
 		ED4E76F61E397667008D4A9D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				ED4E76F51E397667008D4A9D /* OrderIndependentTransparencyWithImageblocks.app */,
+				ED4E76F51E397667008D4A9D /* MultiLayerAlphaBlending.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -142,9 +142,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		ED4E76F41E397667008D4A9D /* OrderIndependentTransparencyWithImageblocks */ = {
+		ED4E76F41E397667008D4A9D /* MultiLayerAlphaBlending */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = ED4E77321E397667008D4A9D /* Build configuration list for PBXNativeTarget "OrderIndependentTransparencyWithImageblocks" */;
+			buildConfigurationList = ED4E77321E397667008D4A9D /* Build configuration list for PBXNativeTarget "MultiLayerAlphaBlending" */;
 			buildPhases = (
 				ED4E76F11E397667008D4A9D /* Sources */,
 				ED4E76F21E397667008D4A9D /* Frameworks */,
@@ -154,9 +154,9 @@
 			);
 			dependencies = (
 			);
-			name = OrderIndependentTransparencyWithImageblocks;
+			name = MultiLayerAlphaBlending;
 			productName = iOS;
-			productReference = ED4E76F51E397667008D4A9D /* OrderIndependentTransparencyWithImageblocks.app */;
+			productReference = ED4E76F51E397667008D4A9D /* MultiLayerAlphaBlending.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -175,7 +175,7 @@
 					};
 				};
 			};
-			buildConfigurationList = ED4E76E51E397666008D4A9D /* Build configuration list for PBXProject "OrderIndependentTransparencyWithImageblocks" */;
+			buildConfigurationList = ED4E76E51E397666008D4A9D /* Build configuration list for PBXProject "MultiLayerAlphaBlending" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
@@ -189,7 +189,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				ED4E76F41E397667008D4A9D /* OrderIndependentTransparencyWithImageblocks */,
+				ED4E76F41E397667008D4A9D /* MultiLayerAlphaBlending */,
 			);
 		};
 /* End PBXProject section */
@@ -295,7 +295,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MTL_ENABLE_DEBUG_INFO = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 			};
 			name = Debug;
@@ -359,7 +359,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.OrderIndependentTransparencyWithImageblocks${SAMPLE_CODE_DISAMBIGUATOR}";
-				PRODUCT_NAME = OrderIndependentTransparencyWithImageblocks;
+				PRODUCT_NAME = MultiLayerAlphaBlending;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -380,7 +380,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.OrderIndependentTransparencyWithImageblocks${SAMPLE_CODE_DISAMBIGUATOR}";
-				PRODUCT_NAME = OrderIndependentTransparencyWithImageblocks;
+				PRODUCT_NAME = MultiLayerAlphaBlending;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -391,7 +391,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		ED4E76E51E397666008D4A9D /* Build configuration list for PBXProject "OrderIndependentTransparencyWithImageblocks" */ = {
+		ED4E76E51E397666008D4A9D /* Build configuration list for PBXProject "MultiLayerAlphaBlending" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				ED4E77301E397667008D4A9D /* Debug */,
@@ -400,7 +400,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		ED4E77321E397667008D4A9D /* Build configuration list for PBXNativeTarget "OrderIndependentTransparencyWithImageblocks" */ = {
+		ED4E77321E397667008D4A9D /* Build configuration list for PBXNativeTarget "MultiLayerAlphaBlending" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				ED4E77331E397667008D4A9D /* Debug */,
